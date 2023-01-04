@@ -4,8 +4,10 @@
 #include "events/Events.hpp"
 #include "helpers/SubsurfaceTree.hpp"
 #include "helpers/AnimatedVariable.hpp"
+#include "helpers/WobblyModel.hpp"
 #include "render/decorations/IHyprWindowDecoration.hpp"
 #include <deque>
+#include <optional>
 #include "config/ConfigDataValues.hpp"
 
 enum eIdleInhibitMode {
@@ -173,6 +175,9 @@ class CWindow {
     // Special render data, rules, etc
     SWindowSpecialRenderData    m_sSpecialRenderData;
     SWindowAdditionalConfigData m_sAdditionalConfigData;
+
+    // Wobbly effect
+    std::optional<CWobblyModel> m_oWobblyModel;
 
     // for alpha
     CAnimatedVariable m_fActiveInactiveAlpha;
