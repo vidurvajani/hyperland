@@ -1797,27 +1797,29 @@ void CHyprOpenGLImpl::createBGTextureForMonitor(CMonitor* pMonitor) {
     // or configure the paths at build time
 
     // get the adequate tex
-    std::string texPath = "/usr/share/hyprland/wall_" + std::string(USEANIME ? (distribution2(engine) == 0 ? "anime_" : "anime2_") : "");
+    std::string texName = "wall_" + std::string(USEANIME ? (distribution2(engine) == 0 ? "anime_" : "anime2_") : "");
     // check if wallpapers exist
 
     Vector2D textureSize;
     if (pMonitor->vecTransformedSize.x > 3850) {
         textureSize = Vector2D(7680, 4320);
-        texPath += "8K.png";
+        texName += "8K.png";
     } else if (pMonitor->vecTransformedSize.x > 1930) {
         textureSize = Vector2D(3840, 2160);
-        texPath += "4K.png";
+        texName += "4K.png";
     } else {
         textureSize = Vector2D(1920, 1080);
-        texPath += "2K.png";
+        texName += "2K.png";
     }
 
-    if (!std::filesystem::exists(texPath)) {
-        // try local
-        texPath = texPath.substr(0, 5) + "local/" + texPath.substr(5);
+    std::string texPath;
+    auto        paths = {"/usr/share/hyprland/", "/usr/local/share/hyprland/", "assets/"};
 
-        if (!std::filesystem::exists(texPath))
-            return; // the texture will be empty, oh well. We'll clear with a solid color anyways.
+    for (auto& path : paths) {
+        texPath = path + texName;
+        if (std::filesystem::exists(texPath))
+            break;
+        texPath = "";
     }
 
     PTEX->m_vSize = textureSize;
@@ -1844,8 +1846,19 @@ void CHyprOpenGLImpl::createBGTextureForMonitor(CMonitor* pMonitor) {
     m_mMonitorRenderResources[pMonitor].backgroundTexBox = box;
 
     // create a new one with cairo
-    const auto CAIROSURFACE = cairo_image_surface_create_from_png(texPath.c_str());
-    const auto CAIRO        = cairo_create(CAIROSURFACE);
+    cairo_surface_t* CAIROSURFACE;
+    if (texPath.empty())
+        // if we couldn't find a texture, use a grey filler image instead.
+        CAIROSURFACE = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, textureSize.x, textureSize.y);
+    else
+        CAIROSURFACE = cairo_image_surface_create_from_png(texPath.c_str());
+    const auto CAIRO = cairo_create(CAIROSURFACE);
+
+    if (texPath.empty()) {
+        cairo_set_source_rgba(CAIRO, 0.106, 0.106, 0.106, 1.0);
+        cairo_rectangle(CAIRO, 0, 0, textureSize.x, textureSize.y);
+        cairo_fill(CAIRO);
+    }
 
     // scale it to fit the current monitor
     cairo_scale(CAIRO, textureSize.x / pMonitor->vecTransformedSize.x, textureSize.y / pMonitor->vecTransformedSize.y);
