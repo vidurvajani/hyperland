@@ -329,11 +329,11 @@ void CHyprRenderer::renderWindow(CWindow* pWindow, CMonitor* pMonitor, timespec*
     renderdata.surface   = pWindow->m_pWLSurface.wlr();
     renderdata.w         = std::max(pWindow->m_vRealSize.vec().x, 5.0); // clamp the size to min 5,
     renderdata.h         = std::max(pWindow->m_vRealSize.vec().y, 5.0); // otherwise we'll have issues later with invalid boxes
-    renderdata.dontRound = (pWindow->m_bIsFullscreen && PWORKSPACE->m_efFullscreenMode == FULLSCREEN_FULL) || (!pWindow->m_sSpecialRenderData.rounding);
+    renderdata.dontRound = (pWindow->m_bIsFullscreen && PWORKSPACE->m_efFullscreenMode == FULLSCREEN_FULL);
     renderdata.fadeAlpha = pWindow->m_fAlpha.fl() * (pWindow->m_bPinned ? 1.f : PWORKSPACE->m_fAlpha.fl());
     renderdata.alpha     = pWindow->m_fActiveInactiveAlpha.fl();
     renderdata.decorate  = decorate && !pWindow->m_bX11DoesntWantBorders && (!pWindow->m_bIsFullscreen || PWORKSPACE->m_efFullscreenMode != FULLSCREEN_FULL);
-    renderdata.rounding  = ignoreAllGeometry || renderdata.dontRound ? 0 : pWindow->rounding() * pMonitor->scale;
+    renderdata.rounding  = ignoreAllGeometry || renderdata.dontRound ? 0 : pWindow->getRealRounding() * pMonitor->scale;
     renderdata.blur      = !ignoreAllGeometry; // if it shouldn't, it will be ignored later
     renderdata.pWindow   = pWindow;
 
@@ -409,18 +409,28 @@ void CHyprRenderer::renderWindow(CWindow* pWindow, CMonitor* pMonitor, timespec*
             }
 
             wlr_box windowBox = {renderdata.x - pMonitor->vecPosition.x, renderdata.y - pMonitor->vecPosition.y, renderdata.w, renderdata.h};
+            wlr_box borderBox;
+
+            if (!pWindow->m_bIsFullscreen || PWORKSPACE->m_efFullscreenMode != FULLSCREEN_FULL)
+                borderBox = {renderdata.x - pMonitor->vecPosition.x - pWindow->m_vReservedInternalTopLeft.goalv().x,
+                             renderdata.y - pMonitor->vecPosition.y - pWindow->m_vReservedInternalTopLeft.goalv().y,
+                             renderdata.w + pWindow->m_vReservedInternalTopLeft.goalv().x + pWindow->m_vReservedInternalBottomRight.goalv().x,
+                             renderdata.h + pWindow->m_vReservedInternalTopLeft.goalv().y + pWindow->m_vReservedInternalBottomRight.goalv().y};
+            else
+                borderBox = windowBox;
 
             scaleBox(&windowBox, pMonitor->scale);
+            scaleBox(&borderBox, pMonitor->scale);
 
             int borderSize = pWindow->m_sSpecialRenderData.borderSize.toUnderlying() == -1 ? *PBORDERSIZE : pWindow->m_sSpecialRenderData.borderSize.toUnderlying();
             if (pWindow->m_sAdditionalConfigData.borderSize.toUnderlying() != -1)
                 borderSize = pWindow->m_sAdditionalConfigData.borderSize.toUnderlying();
 
-            g_pHyprOpenGL->renderBorder(&windowBox, grad, renderdata.rounding, borderSize, a1);
+            g_pHyprOpenGL->renderBorder(&borderBox, grad, renderdata.rounding, borderSize, a1);
 
             if (ANIMATED) {
                 float a2 = renderdata.fadeAlpha * renderdata.alpha * (1.f - g_pHyprOpenGL->m_pCurrentWindow->m_fBorderFadeAnimationProgress.fl());
-                g_pHyprOpenGL->renderBorder(&windowBox, g_pHyprOpenGL->m_pCurrentWindow->m_cRealBorderColorPrevious, renderdata.rounding, borderSize, a2);
+                g_pHyprOpenGL->renderBorder(&borderBox, g_pHyprOpenGL->m_pCurrentWindow->m_cRealBorderColorPrevious, renderdata.rounding, borderSize, a2);
             }
         }
     }
@@ -1981,7 +1991,7 @@ void CHyprRenderer::setOccludedForBackLayers(CRegion& region, CWorkspace* pWorks
         if (!w->opaque())
             continue;
 
-        const auto     ROUNDING = w->rounding() * PMONITOR->scale;
+        const auto     ROUNDING = w->getRealRounding() * PMONITOR->scale;
         const Vector2D POS      = w->m_vRealPosition.vec() + Vector2D{ROUNDING, ROUNDING} - PMONITOR->vecPosition + (w->m_bPinned ? Vector2D{} : pWorkspace->m_vRenderOffset.vec());
         const Vector2D SIZE     = w->m_vRealSize.vec() - Vector2D{ROUNDING * 2, ROUNDING * 2};
 

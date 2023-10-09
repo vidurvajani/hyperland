@@ -6,6 +6,10 @@
 CWindow::CWindow() {
     m_vRealPosition.create(AVARTYPE_VECTOR, g_pConfigManager->getAnimationPropertyConfig("windowsIn"), (void*)this, AVARDAMAGE_ENTIRE);
     m_vRealSize.create(AVARTYPE_VECTOR, g_pConfigManager->getAnimationPropertyConfig("windowsIn"), (void*)this, AVARDAMAGE_ENTIRE);
+    m_vReservedInternalTopLeft.create(AVARTYPE_VECTOR, g_pConfigManager->getAnimationPropertyConfig("windowsIn"), (void*)this, AVARDAMAGE_ENTIRE);
+    m_vReservedInternalBottomRight.create(AVARTYPE_VECTOR, g_pConfigManager->getAnimationPropertyConfig("windowsIn"), (void*)this, AVARDAMAGE_ENTIRE);
+    m_vReservedExternalTopLeft.create(AVARTYPE_VECTOR, g_pConfigManager->getAnimationPropertyConfig("windowsIn"), (void*)this, AVARDAMAGE_ENTIRE);
+    m_vReservedExternalBottomRight.create(AVARTYPE_VECTOR, g_pConfigManager->getAnimationPropertyConfig("windowsIn"), (void*)this, AVARDAMAGE_ENTIRE);
     m_fBorderFadeAnimationProgress.create(AVARTYPE_FLOAT, g_pConfigManager->getAnimationPropertyConfig("border"), (void*)this, AVARDAMAGE_BORDER);
     m_fBorderAngleAnimationProgress.create(AVARTYPE_FLOAT, g_pConfigManager->getAnimationPropertyConfig("borderangle"), (void*)this, AVARDAMAGE_BORDER);
     m_fAlpha.create(AVARTYPE_FLOAT, g_pConfigManager->getAnimationPropertyConfig("fadeIn"), (void*)this, AVARDAMAGE_ENTIRE);
@@ -35,24 +39,23 @@ SWindowDecorationExtents CWindow::getFullWindowExtents() {
                 {PMONITOR->vecSize.x - (m_vRealPosition.vec().x - PMONITOR->vecPosition.x), PMONITOR->vecSize.y - (m_vRealPosition.vec().y - PMONITOR->vecPosition.y)}};
     }
 
-    SWindowDecorationExtents maxExtents = {{BORDERSIZE + 2, BORDERSIZE + 2}, {BORDERSIZE + 2, BORDERSIZE + 2}};
+    SWindowDecorationExtents maxOutterExtents = {{}, {}};
 
     for (auto& wd : m_dWindowDecorations) {
 
         const auto EXTENTS = wd->getWindowDecorationExtents();
 
-        if (EXTENTS.topLeft.x > maxExtents.topLeft.x)
-            maxExtents.topLeft.x = EXTENTS.topLeft.x;
+        if (EXTENTS.isInternalDecoration)
+            continue;
 
-        if (EXTENTS.topLeft.y > maxExtents.topLeft.y)
-            maxExtents.topLeft.y = EXTENTS.topLeft.y;
-
-        if (EXTENTS.bottomRight.x > maxExtents.bottomRight.x)
-            maxExtents.bottomRight.x = EXTENTS.bottomRight.x;
-
-        if (EXTENTS.bottomRight.y > maxExtents.bottomRight.y)
-            maxExtents.bottomRight.y = EXTENTS.bottomRight.y;
+        maxOutterExtents.topLeft.x     = std::max(maxOutterExtents.topLeft.x, EXTENTS.topLeft.x);
+        maxOutterExtents.topLeft.y     = std::max(maxOutterExtents.topLeft.y, EXTENTS.topLeft.y);
+        maxOutterExtents.bottomRight.x = std::max(maxOutterExtents.bottomRight.x, EXTENTS.bottomRight.x);
+        maxOutterExtents.bottomRight.y = std::max(maxOutterExtents.bottomRight.y, EXTENTS.bottomRight.y);
     }
+
+    SWindowDecorationExtents maxExtents = {m_vReservedInternalTopLeft.goalv() + Vector2D{BORDERSIZE + 2, BORDERSIZE + 2} + maxOutterExtents.topLeft,
+                                           m_vReservedInternalBottomRight.goalv() + Vector2D{BORDERSIZE + 2, BORDERSIZE + 2} + maxOutterExtents.bottomRight};
 
     if (m_pWLSurface.exists() && !m_bIsX11) {
         wlr_box surfaceExtents = {0, 0, 0, 0};
@@ -142,27 +145,8 @@ wlr_box CWindow::getWindowInputBox() {
         return {PMONITOR->vecPosition.x, PMONITOR->vecPosition.y, PMONITOR->vecSize.x, PMONITOR->vecSize.y};
     }
 
-    SWindowDecorationExtents maxExtents = {{BORDERSIZE + 2, BORDERSIZE + 2}, {BORDERSIZE + 2, BORDERSIZE + 2}};
-
-    for (auto& wd : m_dWindowDecorations) {
-
-        if (!wd->allowsInput())
-            continue;
-
-        const auto EXTENTS = wd->getWindowDecorationExtents();
-
-        if (EXTENTS.topLeft.x > maxExtents.topLeft.x)
-            maxExtents.topLeft.x = EXTENTS.topLeft.x;
-
-        if (EXTENTS.topLeft.y > maxExtents.topLeft.y)
-            maxExtents.topLeft.y = EXTENTS.topLeft.y;
-
-        if (EXTENTS.bottomRight.x > maxExtents.bottomRight.x)
-            maxExtents.bottomRight.x = EXTENTS.bottomRight.x;
-
-        if (EXTENTS.bottomRight.y > maxExtents.bottomRight.y)
-            maxExtents.bottomRight.y = EXTENTS.bottomRight.y;
-    }
+    SWindowDecorationExtents maxExtents = {m_vReservedInternalTopLeft.goalv() + Vector2D{BORDERSIZE + 2, BORDERSIZE + 2} + m_vReservedExternalTopLeft.goalv(),
+                                           m_vReservedInternalBottomRight.goalv() + Vector2D{BORDERSIZE + 2, BORDERSIZE + 2} + m_vReservedExternalBottomRight.goalv()};
 
     // Add extents to the real base BB and return
     wlr_box finalBox = {m_vRealPosition.vec().x - maxExtents.topLeft.x, m_vRealPosition.vec().y - maxExtents.topLeft.y,
@@ -172,19 +156,16 @@ wlr_box CWindow::getWindowInputBox() {
 }
 
 SWindowDecorationExtents CWindow::getFullWindowReservedArea() {
-    SWindowDecorationExtents extents;
+    const int BORDERSIZE = getRealBorderSize();
+    return {m_vReservedInternalTopLeft.goalv() + m_vReservedExternalTopLeft.goalv() + Vector2D(BORDERSIZE, BORDERSIZE),
+            m_vReservedInternalBottomRight.goalv() + m_vReservedExternalBottomRight.goalv() + Vector2D(BORDERSIZE, BORDERSIZE)};
+}
 
-    for (auto& wd : m_dWindowDecorations) {
-        const auto RESERVED = wd->getWindowDecorationReservedArea();
-
-        if (RESERVED.bottomRight == Vector2D{} && RESERVED.topLeft == Vector2D{})
-            continue;
-
-        extents.topLeft     = extents.topLeft + RESERVED.topLeft;
-        extents.bottomRight = extents.bottomRight + RESERVED.bottomRight;
-    }
-
-    return extents;
+wlr_box CWindow::getWindowInternalBox() {
+    wlr_box                  internalBox          = {m_vRealPosition.vec().x, m_vRealPosition.vec().y, m_vRealSize.vec().x, m_vRealSize.vec().y};
+    SWindowDecorationExtents m_seReservedInternal = {m_vReservedInternalTopLeft.goalv(), m_vReservedInternalBottomRight.goalv()};
+    addExtentsToBox(&internalBox, &m_seReservedInternal);
+    return internalBox;
 }
 
 void CWindow::updateWindowDecos() {
@@ -203,6 +184,37 @@ void CWindow::updateWindowDecos() {
             }
         }
     }
+
+    // handle this better later
+    auto i1 = m_vReservedInternalTopLeft.goalv();
+    auto i2 = m_vReservedInternalBottomRight.goalv();
+    auto e1 = m_vReservedExternalTopLeft.goalv();
+    auto e2 = m_vReservedExternalBottomRight.goalv();
+
+    // reset extents
+    m_vReservedInternalTopLeft     = Vector2D();
+    m_vReservedInternalBottomRight = Vector2D();
+    m_vReservedExternalTopLeft     = Vector2D();
+    m_vReservedExternalBottomRight = Vector2D();
+
+    for (auto& wd : m_dWindowDecorations) {
+        const auto EXTENTS = wd->getWindowDecorationExtents();
+        if (EXTENTS.isInternalDecoration) {
+            m_vReservedInternalTopLeft =
+                Vector2D(std::max(m_vReservedInternalTopLeft.goalv().x, EXTENTS.topLeft.x), std::max(m_vReservedInternalTopLeft.goalv().y, EXTENTS.topLeft.y));
+            m_vReservedInternalBottomRight =
+                Vector2D(std::max(m_vReservedInternalBottomRight.goalv().x, EXTENTS.bottomRight.x), std::max(m_vReservedInternalBottomRight.goalv().y, EXTENTS.bottomRight.y));
+        } else if (EXTENTS.isReservedArea) {
+            m_vReservedExternalTopLeft =
+                Vector2D(std::max(m_vReservedExternalTopLeft.goalv().x, EXTENTS.topLeft.x), std::max(m_vReservedExternalTopLeft.goalv().y, EXTENTS.topLeft.y));
+            m_vReservedExternalBottomRight =
+                Vector2D(std::max(m_vReservedExternalBottomRight.goalv().x, EXTENTS.bottomRight.x), std::max(m_vReservedExternalBottomRight.goalv().y, EXTENTS.bottomRight.y));
+        }
+    }
+
+    if (i1 != m_vReservedInternalTopLeft.goalv() || i2 != m_vReservedInternalBottomRight.goalv() || e1 != m_vReservedExternalTopLeft.goalv() ||
+        e2 != m_vReservedExternalBottomRight.goalv())
+        recalc = true;
 
     if (recalc)
         g_pLayoutManager->getCurrentLayout()->recalculateWindow(this);
@@ -601,7 +613,7 @@ void CWindow::updateDynamicRules() {
 // it is assumed that the point is within the real window box (m_vRealPosition, m_vRealSize)
 // otherwise behaviour is undefined
 bool CWindow::isInCurvedCorner(double x, double y) {
-    const int ROUNDING = rounding();
+    const int ROUNDING = getRealRounding();
     if (getRealBorderSize() >= ROUNDING)
         return false;
 
@@ -898,14 +910,6 @@ bool CWindow::opaque() {
     return false;
 }
 
-float CWindow::rounding() {
-    static auto* const PROUNDING = &g_pConfigManager->getConfigValuePtr("decoration:rounding")->intValue;
-
-    float              rounding = m_sAdditionalConfigData.rounding.toUnderlying() == -1 ? *PROUNDING : m_sAdditionalConfigData.rounding.toUnderlying();
-
-    return rounding;
-}
-
 void CWindow::updateSpecialRenderData() {
     const auto PWORKSPACE    = g_pCompositor->getWorkspaceByID(m_iWorkspaceID);
     const auto WORKSPACERULE = PWORKSPACE ? g_pConfigManager->getWorkspaceRuleFor(PWORKSPACE) : SWorkspaceRule{};
@@ -919,6 +923,21 @@ void CWindow::updateSpecialRenderData() {
     m_sSpecialRenderData.decorate   = WORKSPACERULE.decorate.value_or(true);
     m_sSpecialRenderData.rounding   = WORKSPACERULE.rounding.value_or(true);
     m_sSpecialRenderData.shadow     = WORKSPACERULE.shadow.value_or(true);
+}
+
+int CWindow::getRealRounding() {
+
+    if (!m_sSpecialRenderData.rounding)
+        return 0;
+
+    int rounding;
+
+    if (m_sAdditionalConfigData.rounding.toUnderlying() != -1)
+        rounding = m_sAdditionalConfigData.rounding.toUnderlying();
+    else
+        rounding = g_pConfigManager->getConfigValuePtr("decoration:rounding")->intValue;
+
+    return std::min(rounding, (int)std::min(m_vRealSize.vec().x, m_vRealSize.vec().y) / 2);
 }
 
 int CWindow::getRealBorderSize() {

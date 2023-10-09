@@ -540,16 +540,16 @@ void CInputManager::processMouseDownNormal(wlr_pointer_button_event* e) {
     const auto mouseCoords = g_pInputManager->getMouseCoordsInternal();
     const auto w           = g_pCompositor->vectorToWindowIdeal(mouseCoords);
 
-    if (w && !w->m_bIsFullscreen && !w->hasPopupAt(mouseCoords) && w->m_sGroupData.pNextWindow) {
-        const wlr_box box = w->getDecorationByType(DECORATION_GROUPBAR)->getWindowDecorationRegion().getExtents();
-        if (wlr_box_contains_point(&box, mouseCoords.x, mouseCoords.y)) {
-            if (e->state == WLR_BUTTON_PRESSED) {
-                const int SIZE    = w->getGroupSize();
-                CWindow*  pWindow = w->getGroupWindowByIndex((mouseCoords.x - box.x) * SIZE / box.width);
-                if (w != pWindow)
-                    w->setGroupCurrent(pWindow);
+    if (w && !w->m_bIsFullscreen && !w->hasPopupAt(mouseCoords)) {
+        for (auto& wd : w->m_dWindowDecorations) {
+            if (!wd->allowsInput())
+                continue;
+
+            if (wd->getWindowDecorationRegion().containsPoint(mouseCoords)) {
+                if (e->state == WLR_BUTTON_PRESSED)
+                    wd->clickDecoration(mouseCoords);
+                return;
             }
-            return;
         }
     }
 
@@ -621,7 +621,7 @@ void CInputManager::processMouseDownKill(wlr_pointer_button_event* e) {
 
 void CInputManager::onMouseWheel(wlr_pointer_axis_event* e) {
     static auto* const PSCROLLFACTOR      = &g_pConfigManager->getConfigValuePtr("input:touchpad:scroll_factor")->floatValue;
-    static auto* const PGROUPBARSCROLLING = &g_pConfigManager->getConfigValuePtr("misc:groupbar_scrolling")->intValue;
+    static auto* const PGROUPBARSCROLLING = &g_pConfigManager->getConfigValuePtr("group:groupbar:scrolling")->intValue;
 
     auto               factor = (*PSCROLLFACTOR <= 0.f || e->source != WLR_AXIS_SOURCE_FINGER ? 1.f : *PSCROLLFACTOR);
 

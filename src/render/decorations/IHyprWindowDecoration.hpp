@@ -13,7 +13,11 @@ enum eDecorationType {
 struct SWindowDecorationExtents {
     Vector2D topLeft;
     Vector2D bottomRight;
+    bool     isInternalDecoration = false;
+    bool     isReservedArea       = true; // External Decorations Only
 };
+
+void addExtentsToBox(wlr_box*, SWindowDecorationExtents*);
 
 class CWindow;
 class CMonitor;
@@ -33,11 +37,17 @@ class IHyprWindowDecoration {
 
     virtual void                     damageEntire() = 0;
 
-    virtual SWindowDecorationExtents getWindowDecorationReservedArea();
+    virtual void                     forceReload();
 
     virtual CRegion                  getWindowDecorationRegion();
 
     virtual bool                     allowsInput();
+
+    virtual void                     dragWindowToDecoration(CWindow*, const Vector2D&);
+
+    virtual void                     clickDecoration(const Vector2D&);
+
+    virtual void                     dragFromDecoration(const Vector2D&);
 
   private:
     CWindow* m_pWindow = nullptr;

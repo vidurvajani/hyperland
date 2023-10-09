@@ -285,6 +285,12 @@ class CWindow {
     std::deque<std::unique_ptr<IHyprWindowDecoration>> m_dWindowDecorations;
     std::vector<IHyprWindowDecoration*>                m_vDecosToRemove;
 
+    // Window decorations internal and external reserved area
+    CAnimatedVariable m_vReservedInternalTopLeft;
+    CAnimatedVariable m_vReservedInternalBottomRight;
+    CAnimatedVariable m_vReservedExternalTopLeft;
+    CAnimatedVariable m_vReservedExternalBottomRight;
+
     // Special render data, rules, etc
     SWindowSpecialRenderData    m_sSpecialRenderData;
     SWindowAdditionalConfigData m_sAdditionalConfigData;
@@ -333,6 +339,7 @@ class CWindow {
     SWindowDecorationExtents getFullWindowExtents();
     wlr_box                  getWindowInputBox();
     wlr_box                  getWindowIdealBoundingBoxIgnoreReserved();
+    wlr_box                  getWindowInternalBox();
     void                     updateWindowDecos();
     pid_t                    getPID();
     IHyprWindowDecoration*   getDecorationByType(eDecorationType);
@@ -352,10 +359,10 @@ class CWindow {
     SWindowDecorationExtents getFullWindowReservedArea();
     Vector2D                 middle();
     bool                     opaque();
-    float                    rounding();
     bool                     canBeTorn();
 
     int                      getRealBorderSize();
+    int                      getRealRounding();
     void                     updateSpecialRenderData();
 
     void                     onBorderAngleAnimEnd(void* ptr);
