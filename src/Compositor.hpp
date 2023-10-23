@@ -207,6 +207,7 @@ class CCompositor {
     void           arrangeMonitors();
     void           enterUnsafeState();
     void           leaveUnsafeState();
+    void           markDimTarget();
 
     std::string    explicitConfigPath;
 

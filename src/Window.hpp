@@ -292,6 +292,9 @@ class CWindow {
     // for alpha
     CAnimatedVariable m_fActiveInactiveAlpha;
 
+    // for dim_once
+    bool m_bIsDimTarget = false;
+
     // animated shadow color
     CAnimatedVariable m_cRealShadowColor;
 

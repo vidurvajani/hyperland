@@ -2674,3 +2674,17 @@ void CCompositor::leaveUnsafeState() {
 
     m_pUnsafeOutput = nullptr;
 }
+
+void CCompositor::markDimTarget() {
+    size_t total = 0;
+    for (auto const& w : m_vWindows) {
+        for (auto const& r : g_pConfigManager->getMatchingRules(w.get())) {
+            if (r.szRule == "dimaround") {
+                ++total;
+                break;
+            }
+        }
+
+        w->m_bIsDimTarget = total == 1;
+    }
+}

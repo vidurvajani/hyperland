@@ -314,9 +314,16 @@ void CHyprRenderer::renderWindow(CWindow* pWindow, CMonitor* pMonitor, timespec*
 
     const auto         PWORKSPACE  = g_pCompositor->getWorkspaceByID(pWindow->m_iWorkspaceID);
     const auto         REALPOS     = pWindow->m_vRealPosition.vec() + (pWindow->m_bPinned ? Vector2D{} : PWORKSPACE->m_vRenderOffset.vec());
-    const auto         DIMTHISPASS = g_pConfigManager->getConfigValuePtr("decoration:dim_once")->intValue ? g_pCompositor->m_pLastWindow == pWindow : true;
     static auto* const PDIMAROUND  = &g_pConfigManager->getConfigValuePtr("decoration:dim_around")->floatValue;
     static auto* const PBORDERSIZE = &g_pConfigManager->getConfigValuePtr("general:border_size")->intValue;
+
+    const auto DIMTHISPASS = [pWindow]() {
+        if (g_pConfigManager->getConfigValuePtr("decoration:dim_once")->intValue) {
+            g_pCompositor->markDimTarget();
+            return pWindow->m_bIsDimTarget;
+        }
+        return true;
+    }();
 
     SRenderData        renderdata = {pMonitor, time, REALPOS.x, REALPOS.y};
     if (ignorePosition) {
