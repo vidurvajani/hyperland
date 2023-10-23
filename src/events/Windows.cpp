@@ -646,7 +646,8 @@ void Events::listener_mapWindow(void* owner, void* data) {
     if (PWORKSPACE->m_bHasFullscreenWindow && !PWINDOW->m_bIsFullscreen && !PWINDOW->m_bIsFloating)
         PWINDOW->m_fAlpha.setValueAndWarp(0.f);
 
-    g_pProtocolManager->m_pFractionalScaleProtocolManager->setPreferredScaleForSurface(PWINDOW->m_pWLSurface.wlr(), PMONITOR->scale);
+    g_pCompositor->setPreferredScaleForSurface(PWINDOW->m_pWLSurface.wlr(), PMONITOR->scale);
+    g_pCompositor->setPreferredTransformForSurface(PWINDOW->m_pWLSurface.wlr(), PMONITOR->transform);
 }
 
 void Events::listener_unmapWindow(void* owner, void* data) {
@@ -788,6 +789,8 @@ void Events::listener_commitWindow(void* owner, void* data) {
 
     if (!PWINDOW->m_bMappedX11 || PWINDOW->isHidden() || (PWINDOW->m_bIsX11 && !PWINDOW->m_bMappedX11))
         return;
+
+    PWINDOW->m_vReportedSize = PWINDOW->m_vPendingReportedSize; // apply pending size. We pinged, the window ponged.
 
     PWINDOW->updateSurfaceOutputs();
 

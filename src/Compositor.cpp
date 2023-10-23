@@ -1194,24 +1194,33 @@ void CCompositor::sanityCheckWorkspaces() {
             continue;
         }
 
-        const auto WINDOWSONWORKSPACE = getWindowsOnWorkspace((*it)->m_iID);
+        const auto& WORKSPACE          = *it;
+        const auto  WINDOWSONWORKSPACE = getWindowsOnWorkspace(WORKSPACE->m_iID);
 
-        if ((WINDOWSONWORKSPACE == 0 && !isWorkspaceVisible((*it)->m_iID))) {
+        if (WINDOWSONWORKSPACE == 0) {
+            if (!isWorkspaceVisible(WORKSPACE->m_iID)) {
 
-            if ((*it)->m_bIsSpecialWorkspace) {
-                if ((*it)->m_fAlpha.fl() > 0.f /* don't abruptly end the fadeout */) {
-                    ++it;
-                    continue;
+                if (WORKSPACE->m_bIsSpecialWorkspace) {
+                    if (WORKSPACE->m_fAlpha.fl() > 0.f /* don't abruptly end the fadeout */) {
+                        ++it;
+                        continue;
+                    }
+
+                    const auto PMONITOR = getMonitorFromID(WORKSPACE->m_iMonitorID);
+
+                    if (PMONITOR && PMONITOR->specialWorkspaceID == WORKSPACE->m_iID)
+                        PMONITOR->setSpecialWorkspace(nullptr);
                 }
 
-                const auto PMONITOR = getMonitorFromID((*it)->m_iMonitorID);
-
-                if (PMONITOR && PMONITOR->specialWorkspaceID == (*it)->m_iID)
-                    PMONITOR->setSpecialWorkspace(nullptr);
+                it = m_vWorkspaces.erase(it);
+                continue;
             }
+            if (!WORKSPACE->m_bOnCreatedEmptyExecuted) {
+                if (auto cmd = WORKSPACERULE.onCreatedEmptyRunCmd)
+                    g_pKeybindManager->spawn(*cmd);
 
-            it = m_vWorkspaces.erase(it);
-            continue;
+                WORKSPACE->m_bOnCreatedEmptyExecuted = true;
+            }
         }
 
         ++it;
@@ -1480,6 +1489,9 @@ CWindow* CCompositor::getWindowInDirection(CWindow* pWindow, char dir) {
 
     for (auto& w : m_vWindows) {
         if (w.get() == pWindow || !w->m_bIsMapped || w->isHidden() || w->m_bIsFloating || !isWorkspaceVisible(w->m_iWorkspaceID))
+            continue;
+
+        if (pWindow->m_iMonitorID == w->m_iMonitorID && pWindow->m_iWorkspaceID != w->m_iWorkspaceID)
             continue;
 
         const auto PWORKSPACE = g_pCompositor->getWorkspaceByID(w->m_iWorkspaceID);
@@ -2158,7 +2170,7 @@ void CCompositor::updateFullscreenFadeOnWorkspace(CWorkspace* pWorkspace) {
 }
 
 void CCompositor::setWindowFullscreen(CWindow* pWindow, bool on, eFullscreenMode mode) {
-    if (!windowValidMapped(pWindow))
+    if (!windowValidMapped(pWindow) || g_pCompositor->m_bUnsafeState)
         return;
 
     if (pWindow->m_bPinned) {
@@ -2673,6 +2685,15 @@ void CCompositor::leaveUnsafeState() {
         wlr_output_destroy(m_pUnsafeOutput);
 
     m_pUnsafeOutput = nullptr;
+}
+
+void CCompositor::setPreferredScaleForSurface(wlr_surface* pSurface, double scale) {
+    g_pProtocolManager->m_pFractionalScaleProtocolManager->setPreferredScaleForSurface(pSurface, scale);
+    wlr_surface_set_preferred_buffer_scale(pSurface, scale);
+}
+
+void CCompositor::setPreferredTransformForSurface(wlr_surface* pSurface, wl_output_transform transform) {
+    wlr_surface_set_preferred_buffer_transform(pSurface, transform);
 }
 
 void CCompositor::markDimTarget() {

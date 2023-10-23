@@ -37,7 +37,7 @@ CHyprOpenGLImpl::CHyprOpenGLImpl() {
     Debug::log(WARN, "!RENDERER: Using the legacy GLES2 renderer!");
 #endif
 
-    g_pHookSystem->hookDynamic("preRender", [&](void* self, std::any data) { preRender(std::any_cast<CMonitor*>(data)); });
+    g_pHookSystem->hookDynamic("preRender", [&](void* self, SCallbackInfo& info, std::any data) { preRender(std::any_cast<CMonitor*>(data)); });
 
     RASSERT(eglMakeCurrent(wlr_egl_get_display(g_pCompositor->m_sWLREGL), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT), "Couldn't unset current EGL!");
 
@@ -128,10 +128,12 @@ void CHyprOpenGLImpl::begin(CMonitor* pMonitor, CRegion* pDamage, bool fake) {
         m_RenderData.pCurrentMonData->primaryFB.m_pStencilTex    = &m_RenderData.pCurrentMonData->stencilTex;
         m_RenderData.pCurrentMonData->mirrorFB.m_pStencilTex     = &m_RenderData.pCurrentMonData->stencilTex;
         m_RenderData.pCurrentMonData->mirrorSwapFB.m_pStencilTex = &m_RenderData.pCurrentMonData->stencilTex;
+        m_RenderData.pCurrentMonData->offMainFB.m_pStencilTex    = &m_RenderData.pCurrentMonData->stencilTex;
 
         m_RenderData.pCurrentMonData->primaryFB.alloc(pMonitor->vecPixelSize.x, pMonitor->vecPixelSize.y);
         m_RenderData.pCurrentMonData->mirrorFB.alloc(pMonitor->vecPixelSize.x, pMonitor->vecPixelSize.y);
         m_RenderData.pCurrentMonData->mirrorSwapFB.alloc(pMonitor->vecPixelSize.x, pMonitor->vecPixelSize.y);
+        m_RenderData.pCurrentMonData->offMainFB.alloc(pMonitor->vecPixelSize.x, pMonitor->vecPixelSize.y);
 
         createBGTextureForMonitor(pMonitor);
     }
@@ -148,6 +150,8 @@ void CHyprOpenGLImpl::begin(CMonitor* pMonitor, CRegion* pDamage, bool fake) {
     m_RenderData.damage.set(*pDamage);
 
     m_bFakeFrame = fake;
+
+    m_RenderData.currentFB = &m_RenderData.pCurrentMonData->primaryFB;
 
     if (m_bReloadScreenShader) {
         m_bReloadScreenShader = false;
@@ -1892,6 +1896,7 @@ void CHyprOpenGLImpl::destroyMonitorResources(CMonitor* pMonitor) {
     g_pHyprOpenGL->m_mMonitorRenderResources[pMonitor].mirrorSwapFB.release();
     g_pHyprOpenGL->m_mMonitorRenderResources[pMonitor].monitorMirrorFB.release();
     g_pHyprOpenGL->m_mMonitorRenderResources[pMonitor].blurFB.release();
+    g_pHyprOpenGL->m_mMonitorRenderResources[pMonitor].offMainFB.release();
     g_pHyprOpenGL->m_mMonitorRenderResources[pMonitor].stencilTex.destroyTexture();
     g_pHyprOpenGL->m_mMonitorBGTextures[pMonitor].destroyTexture();
     g_pHyprOpenGL->m_mMonitorRenderResources.erase(pMonitor);
@@ -1913,4 +1918,20 @@ void CHyprOpenGLImpl::setMatrixScaleTranslate(const Vector2D& translate, const f
 
 void CHyprOpenGLImpl::restoreMatrix() {
     memcpy(m_RenderData.projection, m_RenderData.savedProjection, 9 * sizeof(float));
+}
+
+void CHyprOpenGLImpl::bindOffMain() {
+    m_RenderData.pCurrentMonData->offMainFB.bind();
+    clear(CColor(0, 0, 0, 0));
+    m_RenderData.currentFB = &m_RenderData.pCurrentMonData->offMainFB;
+}
+
+void CHyprOpenGLImpl::renderOffToMain(CFramebuffer* off) {
+    wlr_box monbox = {0, 0, m_RenderData.pMonitor->vecTransformedSize.x, m_RenderData.pMonitor->vecTransformedSize.y};
+    renderTexturePrimitive(off->m_cTex, &monbox);
+}
+
+void CHyprOpenGLImpl::bindBackOnMain() {
+    m_RenderData.pCurrentMonData->primaryFB.bind();
+    m_RenderData.currentFB = &m_RenderData.pCurrentMonData->primaryFB;
 }
