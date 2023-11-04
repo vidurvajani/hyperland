@@ -2718,3 +2718,17 @@ void CCompositor::setPreferredScaleForSurface(wlr_surface* pSurface, double scal
 void CCompositor::setPreferredTransformForSurface(wlr_surface* pSurface, wl_output_transform transform) {
     wlr_surface_set_preferred_buffer_transform(pSurface, transform);
 }
+
+void CCompositor::markDimTarget() {
+    size_t total = 0;
+    for (auto const& w : m_vWindows) {
+        for (auto const& r : g_pConfigManager->getMatchingRules(w.get())) {
+            if (r.szRule == "dimaround") {
+                ++total;
+                break;
+            }
+        }
+
+        w->m_bIsDimTarget = total == 1;
+    }
+}
