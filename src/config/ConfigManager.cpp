@@ -285,6 +285,7 @@ void CConfigManager::setDefaultVars() {
 
     configValues["xwayland:use_nearest_neighbor"].intValue = 1;
     configValues["xwayland:force_zero_scaling"].intValue   = 0;
+    configValues["xwayland:enabled"].intValue              = 1;
 
     configValues["opengl:nvidia_anti_flicker"].intValue = 1;
 
