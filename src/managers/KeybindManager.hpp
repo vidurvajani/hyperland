@@ -151,6 +151,7 @@ class CKeybindManager {
     static void     forceRendererReload(std::string);
     static void     resizeActive(std::string);
     static void     moveActive(std::string);
+    static void     toggleSwallow(std::string);
     static void     moveWindow(std::string);
     static void     resizeWindow(std::string);
     static void     circleNext(std::string);

@@ -340,7 +340,8 @@ class CWindow {
     CAnimatedVariable<float> m_fDimPercent;
 
     // swallowing
-    CWindow* m_pSwallowed = nullptr;
+    CWindow* m_pSwallowed           = nullptr;
+    CWindow* m_pPreviouslySwallowed = nullptr;
 
     // focus stuff
     bool m_bStayFocused = false;
