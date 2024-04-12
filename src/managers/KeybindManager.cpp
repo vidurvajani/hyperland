@@ -1823,17 +1823,19 @@ void CKeybindManager::focusWindow(std::string regexp) {
 
 void CKeybindManager::toggleSwallow(std::string args) {
     CWindow* pWindow = g_pCompositor->m_pLastWindow;
-    if (pWindow->m_pSwallowed && g_pCompositor->windowExists(pWindow->m_pSwallowed)) {
+    if (pWindow->m_pSwallowed) {
         pWindow->m_pPreviouslySwallowed = pWindow->m_pSwallowed;
 
         pWindow->m_pSwallowed->setHidden(false);
 
         g_pLayoutManager->getCurrentLayout()->onWindowCreated(pWindow->m_pSwallowed);
 
-        pWindow->m_pSwallowed = nullptr;
+        pWindow->m_pSwallowed->m_pSwallowedBy = nullptr;
+        pWindow->m_pSwallowed                 = nullptr;
 
-    } else if (pWindow->m_pPreviouslySwallowed && g_pCompositor->windowExists(pWindow->m_pPreviouslySwallowed)) {
-        pWindow->m_pSwallowed = pWindow->m_pPreviouslySwallowed;
+    } else if (pWindow->m_pPreviouslySwallowed) {
+        pWindow->m_pSwallowed                 = pWindow->m_pPreviouslySwallowed;
+        pWindow->m_pSwallowed->m_pSwallowedBy = pWindow;
 
         g_pLayoutManager->getCurrentLayout()->onWindowRemoved(pWindow->m_pPreviouslySwallowed);
 

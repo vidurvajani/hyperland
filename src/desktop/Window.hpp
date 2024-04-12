@@ -342,6 +342,7 @@ class CWindow {
     // swallowing
     CWindow* m_pSwallowed           = nullptr;
     CWindow* m_pPreviouslySwallowed = nullptr;
+    CWindow* m_pSwallowedBy         = nullptr;
 
     // focus stuff
     bool m_bStayFocused = false;
