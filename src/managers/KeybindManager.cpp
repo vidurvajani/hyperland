@@ -1823,25 +1823,24 @@ void CKeybindManager::focusWindow(std::string regexp) {
 
 void CKeybindManager::toggleSwallow(std::string args) {
     CWindow* pWindow = g_pCompositor->m_pLastWindow;
-    if (pWindow->m_pSwallowed) {
-        pWindow->m_pPreviouslySwallowed = pWindow->m_pSwallowed;
 
+    if (!pWindow->m_pSwallowed)
+        return;
+
+    if (pWindow->m_bCurrentlySwallowing) {
+        // Unswallow
         pWindow->m_pSwallowed->setHidden(false);
-
         g_pLayoutManager->getCurrentLayout()->onWindowCreated(pWindow->m_pSwallowed);
 
-        pWindow->m_pSwallowed->m_pSwallowedBy = nullptr;
-        pWindow->m_pSwallowed                 = nullptr;
-
-    } else if (pWindow->m_pPreviouslySwallowed) {
-        pWindow->m_pSwallowed                 = pWindow->m_pPreviouslySwallowed;
-        pWindow->m_pSwallowed->m_pSwallowedBy = pWindow;
-
-        g_pLayoutManager->getCurrentLayout()->onWindowRemoved(pWindow->m_pPreviouslySwallowed);
-
-        pWindow->m_pPreviouslySwallowed->setHidden(true);
+        pWindow->m_bCurrentlySwallowing = false;
+    } else {
+        // Reswallow
+        g_pLayoutManager->getCurrentLayout()->onWindowRemoved(pWindow->m_pSwallowed);
+        pWindow->m_pSwallowed->setHidden(true);
 
         g_pLayoutManager->getCurrentLayout()->recalculateMonitor(pWindow->m_iMonitorID);
+
+        pWindow->m_bCurrentlySwallowing = true;
     }
 }
 

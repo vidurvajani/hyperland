@@ -583,8 +583,9 @@ void Events::listener_mapWindow(void* owner, void* data) {
                     // check if it's the window we want & not exempt from getting swallowed
                     if (valid) {
                         // swallow
-                        PWINDOW->m_pSwallowed      = finalFound;
-                        finalFound->m_pSwallowedBy = PWINDOW;
+                        PWINDOW->m_pSwallowed           = finalFound;
+                        finalFound->m_pSwallowedBy      = PWINDOW;
+                        PWINDOW->m_bCurrentlySwallowing = true;
 
                         g_pLayoutManager->getCurrentLayout()->onWindowRemoved(finalFound);
 
