@@ -614,7 +614,9 @@ void Events::listener_mapWindow(void* owner, void* data) {
                     // check if it's the window we want & not exempt from getting swallowed
                     if (valid) {
                         // swallow
-                        PWINDOW->m_pSwallowed = finalFound;
+                        PWINDOW->m_pSwallowed           = finalFound;
+                        finalFound->m_pSwallowedBy      = PWINDOW;
+                        PWINDOW->m_bCurrentlySwallowing = true;
 
                         g_pLayoutManager->getCurrentLayout()->onWindowRemoved(finalFound);
 
@@ -718,10 +720,16 @@ void Events::listener_unmapWindow(void* owner, void* data) {
     g_pHyprOpenGL->makeWindowSnapshot(PWINDOW);
 
     // swallowing
-    if (PWINDOW->m_pSwallowed && g_pCompositor->windowExists(PWINDOW->m_pSwallowed)) {
+    if (PWINDOW->m_pSwallowed) {
         PWINDOW->m_pSwallowed->setHidden(false);
         g_pLayoutManager->getCurrentLayout()->onWindowCreated(PWINDOW->m_pSwallowed);
-        PWINDOW->m_pSwallowed = nullptr;
+        PWINDOW->m_pSwallowed->m_pSwallowedBy = nullptr;
+        PWINDOW->m_pSwallowed                 = nullptr;
+    }
+    // swallowed
+    if (PWINDOW->m_pSwallowedBy) {
+        PWINDOW->m_pSwallowedBy->m_pSwallowed = nullptr;
+        PWINDOW->m_pSwallowedBy               = nullptr;
     }
 
     bool wasLastWindow = false;

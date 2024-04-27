@@ -83,6 +83,7 @@ CKeybindManager::CKeybindManager() {
     m_mDispatchers["cyclenext"]                      = circleNext;
     m_mDispatchers["focuswindowbyclass"]             = focusWindow;
     m_mDispatchers["focuswindow"]                    = focusWindow;
+    m_mDispatchers["toggleswallow"]                  = toggleSwallow;
     m_mDispatchers["submap"]                         = setSubmap;
     m_mDispatchers["pass"]                           = pass;
     m_mDispatchers["layoutmsg"]                      = layoutmsg;
@@ -1859,6 +1860,29 @@ void CKeybindManager::focusWindow(std::string regexp) {
         g_pCompositor->focusWindow(PWINDOW);
 
     g_pCompositor->warpCursorTo(PWINDOW->middle());
+}
+
+void CKeybindManager::toggleSwallow(std::string args) {
+    CWindow* pWindow = g_pCompositor->m_pLastWindow;
+
+    if (!pWindow->m_pSwallowed)
+        return;
+
+    if (pWindow->m_bCurrentlySwallowing) {
+        // Unswallow
+        pWindow->m_pSwallowed->setHidden(false);
+        g_pLayoutManager->getCurrentLayout()->onWindowCreated(pWindow->m_pSwallowed);
+
+        pWindow->m_bCurrentlySwallowing = false;
+    } else {
+        // Reswallow
+        g_pLayoutManager->getCurrentLayout()->onWindowRemoved(pWindow->m_pSwallowed);
+        pWindow->m_pSwallowed->setHidden(true);
+
+        g_pLayoutManager->getCurrentLayout()->recalculateMonitor(pWindow->m_iMonitorID);
+
+        pWindow->m_bCurrentlySwallowing = true;
+    }
 }
 
 void CKeybindManager::setSubmap(std::string submap) {
