@@ -77,6 +77,8 @@ assert lib.assertMsg (!hidpiXWayland) "The option `hidpiXWayland` has been remov
 
       # Remove extra @PREFIX@ to fix pkg-config paths
       sed -i "s#@PREFIX@/##g" hyprland.pc.in
+
+      realpath ${hyprwayland-scanner}
     '';
 
     COMMITS = commit;
@@ -131,6 +133,9 @@ assert lib.assertMsg (!hidpiXWayland) "The option `hidpiXWayland` has been remov
         tomlplusplus
         wayland
         wayland-protocols
+        seatd
+        libdisplay-info
+        libliftoff
       ]
       (lib.optionals stdenv.hostPlatform.isMusl [libexecinfo])
       (lib.optionals enableXWayland [
