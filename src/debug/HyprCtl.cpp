@@ -989,7 +989,7 @@ std::string dispatchKeyword(eHyprCtlOutputFormat format, std::string in) {
     if (COMMAND.contains("decoration:") || COMMAND.contains("border") || COMMAND == "workspace" || COMMAND.contains("zoom_factor") || COMMAND == "source") {
         for (auto& m : g_pCompositor->m_vMonitors) {
             g_pHyprRenderer->damageMonitor(m.get());
-            g_pLayoutManager->getCurrentLayout()->recalculateMonitor(m->ID);
+            m->activeWorkspace->getCurrentLayout()->recalculateMonitor(m->ID);
         }
     }
 
@@ -1297,7 +1297,7 @@ std::string dispatchSetProp(eHyprCtlOutputFormat format, std::string request) {
     }
 
     for (auto& m : g_pCompositor->m_vMonitors)
-        g_pLayoutManager->getCurrentLayout()->recalculateMonitor(m->ID);
+        m->activeWorkspace->getCurrentLayout()->recalculateMonitor(m->ID);
 
     return "ok";
 }
@@ -1723,7 +1723,7 @@ std::string CHyprCtl::getReply(std::string request) {
 
         for (auto& m : g_pCompositor->m_vMonitors) {
             g_pHyprRenderer->damageMonitor(m.get());
-            g_pLayoutManager->getCurrentLayout()->recalculateMonitor(m->ID);
+            m->activeWorkspace->getCurrentLayout()->recalculateMonitor(m->ID);
         }
     }
 
