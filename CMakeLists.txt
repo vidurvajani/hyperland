@@ -107,7 +107,6 @@ pkg_check_modules(
   xcursor
   libdrm
   libinput
-  hwdata
   libseat
   libdisplay-info
   libliftoff

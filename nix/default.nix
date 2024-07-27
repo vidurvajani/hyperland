@@ -12,7 +12,6 @@
   expat,
   fribidi,
   git,
-  hwdata,
   hyprcursor,
   hyprlang,
   hyprutils,
@@ -77,14 +76,18 @@ assert lib.assertMsg (!hidpiXWayland) "The option `hidpiXWayland` has been remov
 
       # Remove extra @PREFIX@ to fix pkg-config paths
       sed -i "s#@PREFIX@/##g" hyprland.pc.in
-
-      realpath ${hyprwayland-scanner}
     '';
 
     COMMITS = commit;
     DATE = date;
     DIRTY = lib.optionalString (commit == "") "dirty";
     HASH = commit;
+
+    strictDeps = true;
+
+    depsBuildBuild = [
+      pkg-config
+    ];
 
     nativeBuildInputs = [
       hyprwayland-scanner
@@ -110,7 +113,6 @@ assert lib.assertMsg (!hidpiXWayland) "The option `hidpiXWayland` has been remov
         expat
         fribidi
         git
-        hwdata
         hyprcursor
         hyprlang
         hyprutils
