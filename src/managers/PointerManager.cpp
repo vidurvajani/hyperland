@@ -6,6 +6,11 @@
 #include "../protocols/core/Compositor.hpp"
 #include "eventLoop/EventLoopManager.hpp"
 #include "SeatManager.hpp"
+#include "render/OpenGL.hpp"
+#include "render/Texture.hpp"
+#include <GLES3/gl32.h>
+#include <aquamarine/buffer/Buffer.hpp>
+#include <cstdint>
 #include <cstring>
 #include <gbm.h>
 
@@ -378,25 +383,8 @@ SP<Aquamarine::IBuffer> CPointerManager::renderHWCursorBuffer(SP<CPointerManager
     } else
         maxSize = cursorSize;
 
-    if (!state->monitor->cursorSwapchain || maxSize != state->monitor->cursorSwapchain->currentOptions().size) {
-
-        if (!state->monitor->cursorSwapchain)
-            state->monitor->cursorSwapchain = Aquamarine::CSwapchain::create(state->monitor->output->getBackend()->preferredAllocator(), state->monitor->output->getBackend());
-
-        auto options     = state->monitor->cursorSwapchain->currentOptions();
-        options.size     = maxSize;
-        options.length   = 2;
-        options.scanout  = true;
-        options.cursor   = true;
-        options.multigpu = state->monitor->output->getBackend()->preferredAllocator()->drmFD() != g_pCompositor->m_iDRMFD;
-        // We do not set the format. If it's unset (DRM_FORMAT_INVALID) then the swapchain will pick for us,
-        // but if it's set, we don't wanna change it.
-
-        if (!state->monitor->cursorSwapchain->reconfigure(options)) {
-            Debug::log(TRACE, "Failed to reconfigure cursor swapchain");
-            return nullptr;
-        }
-    }
+    if (!state->monitor->resizeCursorSwapchain(maxSize))
+        return nullptr;
 
     // if we already rendered the cursor, revert the swapchain to avoid rendering the cursor over
     // the current front buffer
@@ -417,34 +405,82 @@ SP<Aquamarine::IBuffer> CPointerManager::renderHWCursorBuffer(SP<CPointerManager
     g_pHyprRenderer->makeEGLCurrent();
     g_pHyprOpenGL->m_RenderData.pMonitor = state->monitor.get();
 
-    auto RBO = g_pHyprRenderer->getOrCreateRenderbuffer(buf, state->monitor->cursorSwapchain->currentOptions().format);
+    bool                    needsFallback = false;
+    SP<Aquamarine::IBuffer> fallback;
+
+    auto                    RBO =
+        buf->type() == Aquamarine::BUFFER_TYPE_DMABUF_DUMB ? nullptr : g_pHyprRenderer->getOrCreateRenderbuffer(buf, state->monitor->cursorSwapchain->currentOptions().format);
     if (!RBO) {
         Debug::log(TRACE, "Failed to create cursor RB with format {}, mod {}", buf->dmabuf().format, buf->dmabuf().modifier);
         static auto PDUMB = CConfigValue<Hyprlang::INT>("cursor:allow_dumb_copy");
-        if (!*PDUMB)
-            return nullptr;
+        static auto PSLOW = CConfigValue<Hyprlang::INT>("cursor:allow_slow_copy");
 
-        auto bufData = buf->beginDataPtr(0);
-        auto bufPtr  = std::get<0>(bufData);
+        auto        isDumb = buf->type() == Aquamarine::BUFFER_TYPE_DMABUF_DUMB;
+        if (isDumb != *PDUMB) {
+            Debug::log(TRACE, "[pointer] switching swapchain to {}", *PDUMB ? "dumb" : "gbm");
+            if (!state->monitor->resizeCursorSwapchain(maxSize, *PDUMB))
+                return nullptr;
 
-        // clear buffer
-        memset(bufPtr, 0, std::get<2>(bufData));
-
-        auto texBuffer = currentCursorImage.pBuffer ? currentCursorImage.pBuffer : currentCursorImage.surface->resource()->current.buffer;
-
-        if (texBuffer) {
-            auto textAttrs = texBuffer->shm();
-            auto texData   = texBuffer->beginDataPtr(GBM_BO_TRANSFER_WRITE);
-            auto texPtr    = std::get<0>(texData);
-            Debug::log(TRACE, "cursor texture {}x{} {} {} {}", textAttrs.size.x, textAttrs.size.y, (void*)texPtr, textAttrs.format, textAttrs.stride);
-            // copy cursor texture
-            for (int i = 0; i < texBuffer->shm().size.y; i++)
-                memcpy(bufPtr + i * buf->dmabuf().strides[0], texPtr + i * textAttrs.stride, textAttrs.stride);
+            buf = state->monitor->cursorSwapchain->next(nullptr);
+            if (!buf) {
+                Debug::log(TRACE, "Failed to acquire a buffer from the cursor swapchain");
+                return nullptr;
+            }
+            isDumb = buf->type() == Aquamarine::BUFFER_TYPE_DMABUF_DUMB;
         }
 
-        buf->endDataPtr();
+        if (!*PDUMB && !*PSLOW)
+            return nullptr;
 
-        return buf;
+        // slow copy will fail with dumb buffer
+        if (*PSLOW && !*PDUMB) {
+            Debug::log(TRACE, "[pointer] performing slow copy");
+            needsFallback = true;
+
+            if (!state->monitor->resizeCursorFallbackSwapchain(maxSize))
+                return nullptr;
+
+            fallback = state->monitor->cursorFallbackSwapchain->next(nullptr);
+            if (!fallback) {
+                Debug::log(TRACE, "Failed to acquire a buffer from the cursor fallback swapchain");
+                return nullptr;
+            }
+
+            RBO = g_pHyprRenderer->getOrCreateRenderbuffer(fallback, state->monitor->cursorFallbackSwapchain->currentOptions().format);
+            if (!RBO) {
+                Debug::log(TRACE, "Failed to create cursor RB with format {}, mod {}", fallback->dmabuf().format, fallback->dmabuf().modifier);
+                return nullptr;
+            }
+        } else {
+            Debug::log(TRACE, "[pointer] performing dumb copy");
+            auto bufData = buf->beginDataPtr(0);
+            auto bufPtr  = std::get<0>(bufData);
+
+            auto bufSize   = isDumb ? buf->shm().size : buf->dmabuf().size;
+            auto bufStride = isDumb ? buf->shm().stride : buf->dmabuf().strides[0];
+
+            // clear buffer
+            memset(bufPtr, 0, bufStride * bufSize.y);
+
+            auto texBuffer = currentCursorImage.pBuffer ? currentCursorImage.pBuffer : currentCursorImage.surface->resource()->current.buffer;
+            if (texBuffer) {
+                auto textAttrs = texBuffer->shm();
+                auto texData   = texBuffer->beginDataPtr(GBM_BO_TRANSFER_WRITE);
+                auto texPtr    = std::get<0>(texData);
+                Debug::log(TRACE, "cursor texture {}x{} {} {} {}", textAttrs.size.x, textAttrs.size.y, (void*)texPtr, textAttrs.format, textAttrs.stride);
+
+                // copy cursor texture
+                if (bufStride == textAttrs.stride && bufSize == textAttrs.size)
+                    memcpy(bufPtr, texPtr, textAttrs.stride * textAttrs.size.y);
+                else
+                    for (int i = 0; i < texBuffer->shm().size.y; i++)
+                        memcpy(bufPtr + i * bufStride, texPtr + i * textAttrs.stride, textAttrs.stride);
+            }
+
+            buf->endDataPtr();
+
+            return buf;
+        }
     }
 
     RBO->bind();
@@ -459,9 +495,44 @@ SP<Aquamarine::IBuffer> CPointerManager::renderHWCursorBuffer(SP<CPointerManager
     g_pHyprOpenGL->renderTexture(texture, &xbox, 1.F);
 
     g_pHyprOpenGL->end();
-    glFlush();
-    g_pHyprOpenGL->m_RenderData.pMonitor = nullptr;
+    if (!needsFallback)
+        glFlush();
+    else {
+        glFinish();
 
+        // wlroots tries to blit here but it'll fail the same way we've got here in the first place
+        auto bufAttrs = buf->dmabuf();
+        auto texAttrs = fallback->dmabuf();
+
+        auto bufData = buf->beginDataPtr(GBM_BO_TRANSFER_WRITE);
+        auto bufPtr  = std::get<0>(bufData);
+
+        Debug::log(TRACE, "cursor buffer {}x{} {} format={} stride={}", bufAttrs.size.x, bufAttrs.size.y, (void*)bufPtr, bufAttrs.format, bufAttrs.strides[0]);
+        Debug::log(TRACE, "fallback buffer {}x{} format={} stride={}", texAttrs.size.x, texAttrs.size.y, texAttrs.format, texAttrs.strides[0]);
+
+        g_pHyprRenderer->makeEGLCurrent();
+        auto   fallbackTexture = new CTexture(fallback);
+        GLuint id;
+        glGenFramebuffers(1, &id);
+        glBindFramebuffer(GL_FRAMEBUFFER, id);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, fallbackTexture->m_iTarget, fallbackTexture->m_iTexID, 0);
+
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+            Debug::log(ERR, "cursor slow copy: glCheckFramebufferStatus failed");
+        else {
+            const auto PFORMAT = FormatUtils::getPixelFormatFromDRM(bufAttrs.format);
+            glPixelStorei(GL_PACK_ALIGNMENT, 1);
+
+            glReadPixels(0, 0, bufAttrs.size.x, bufAttrs.size.y, GL_RGBA, PFORMAT->glType, bufPtr);
+        }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteFramebuffers(1, &id);
+
+        buf->endDataPtr();
+    }
+
+    g_pHyprOpenGL->m_RenderData.pMonitor = nullptr;
     g_pHyprRenderer->onRenderbufferDestroy(RBO.get());
 
     return buf;
